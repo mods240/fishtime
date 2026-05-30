@@ -106,7 +106,6 @@ export default function FishtimeMap({ restaurants, center, bookmarks, interested
   const [heading, setHeading] = useState<number | null>(null);
   const [showCompassModal, setShowCompassModal] = useState(false);
   const handleOrientationRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
-  const compassAskedRef = useRef(false);
 
   function startCompass() {
     function handleOrientation(e: DeviceOrientationEvent) {
@@ -140,10 +139,13 @@ export default function FishtimeMap({ restaurants, center, bookmarks, interested
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const DevOrient = DeviceOrientationEvent as any;
     if (typeof DevOrient.requestPermission === "function") {
-      // iOS: 初回だけモーダルを表示
-      if (!compassAskedRef.current) {
-        compassAskedRef.current = true;
+      // iOS: 初回だけモーダルを表示（localStorageで記憶）
+      if (!localStorage.getItem("compassPermissionAsked")) {
+        localStorage.setItem("compassPermissionAsked", "true");
         setShowCompassModal(true);
+      } else if (localStorage.getItem("compassPermissionGranted") === "true") {
+        // 以前に許可済みならそのまま開始
+        startCompass();
       }
     } else {
       // Android・PC: 許可不要なのでそのまま開始
@@ -158,6 +160,7 @@ export default function FishtimeMap({ restaurants, center, bookmarks, interested
   }, []);
 
   function handleCompassAllow() {
+    localStorage.setItem("compassPermissionGranted", "true");
     setShowCompassModal(false);
     startCompass();
   }
