@@ -31,7 +31,7 @@ async function fetchRestaurants(bbox, region) {
     out body;
   `;
 
-  const url = 'https://overpass.kumi.systems/api/interpreter';
+  const url = 'https://lz4.overpass-api.de/api/interpreter';
   const response = await fetch(url, {
     method: 'POST',
     body: `data=${encodeURIComponent(query)}`,
@@ -81,7 +81,7 @@ async function main() {
 
       total += restaurants.length;
       // Overpass APIへの負荷軽減
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 5000));
     } catch (e) {
       console.error(`  ❌ ${region.name} エラー:`, e.message);
     }
