@@ -104,7 +104,9 @@ function MapInit({ center }: { center: [number, number] }) {
 
 export default function FishtimeMap({ restaurants, center, bookmarks, interested, onToggleBookmark, onToggleInterested }: MapProps) {
   const [heading, setHeading] = useState<number | null>(null);
+  const [showCompassModal, setShowCompassModal] = useState(false);
   const handleOrientationRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
+  const compassAskedRef = useRef(false);
 
   function startCompass() {
     function handleOrientation(e: DeviceOrientationEvent) {
@@ -120,6 +122,7 @@ export default function FishtimeMap({ restaurants, center, bookmarks, interested
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const DevOrient = DeviceOrientationEvent as any;
     if (typeof DevOrient.requestPermission === "function") {
+      // iOS: requestPermissionが必要
       DevOrient.requestPermission()
         .then((result: string) => {
           if (result === "granted") {
@@ -128,12 +131,24 @@ export default function FishtimeMap({ restaurants, center, bookmarks, interested
         })
         .catch(() => {});
     } else {
+      // Android・PC
       window.addEventListener("deviceorientation", handleOrientation, true);
     }
   }
 
   useEffect(() => {
-    startCompass();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const DevOrient = DeviceOrientationEvent as any;
+    if (typeof DevOrient.requestPermission === "function") {
+      // iOS: 初回だけモーダルを表示
+      if (!compassAskedRef.current) {
+        compassAskedRef.current = true;
+        setShowCompassModal(true);
+      }
+    } else {
+      // Android・PC: 許可不要なのでそのまま開始
+      startCompass();
+    }
     return () => {
       if (handleOrientationRef.current) {
         window.removeEventListener("deviceorientation", handleOrientationRef.current, true);
@@ -142,104 +157,153 @@ export default function FishtimeMap({ restaurants, center, bookmarks, interested
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function handleCompassAllow() {
+    setShowCompassModal(false);
+    startCompass();
+  }
+
+  function handleCompassDeny() {
+    setShowCompassModal(false);
+  }
+
   return (
-    <MapContainer center={center} zoom={14} style={{ height: "100%", width: "100%" }} zoomControl={true}>
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      <MapInit center={center} />
-      <Marker position={center} icon={createCurrentIcon(heading)}>
-        <Popup>📍 現在地</Popup>
-      </Marker>
+    <>
+      {showCompassModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.6)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "24px",
+        }}>
+          <div style={{
+            background: "white", borderRadius: "16px", padding: "24px",
+            maxWidth: "320px", width: "100%", textAlign: "center",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+          }}>
+            <div style={{ fontSize: "48px", marginBottom: "12px" }}>🧭</div>
+            <h2 style={{ fontSize: "18px", fontWeight: "bold", color: "#1e3a5f", marginBottom: "8px" }}>
+              方向ビームを使いますか？
+            </h2>
+            <p style={{ fontSize: "14px", color: "#666", marginBottom: "24px", lineHeight: "1.6" }}>
+              スマホの向きを検知して、現在地から進行方向にビームを表示します。
+            </p>
+            <button
+              onClick={handleCompassAllow}
+              style={{
+                width: "100%", padding: "12px", marginBottom: "8px",
+                background: "#1e3a5f", color: "white", border: "none",
+                borderRadius: "8px", fontSize: "16px", fontWeight: "bold", cursor: "pointer",
+              }}
+            >🧭 許可する</button>
+            <button
+              onClick={handleCompassDeny}
+              style={{
+                width: "100%", padding: "10px",
+                background: "transparent", color: "#999", border: "none",
+                borderRadius: "8px", fontSize: "14px", cursor: "pointer",
+              }}
+            >使わない</button>
+          </div>
+        </div>
+      )}
+      <MapContainer center={center} zoom={14} style={{ height: "100%", width: "100%" }} zoomControl={true}>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <MapInit center={center} />
+        <Marker position={center} icon={createCurrentIcon(heading)}>
+          <Popup>📍 現在地</Popup>
+        </Marker>
 
-      <MarkerClusterGroup
-        iconCreateFunction={(cluster: { getChildCount: () => number; getAllChildMarkers: () => L.Marker[] }) => {
-          const count = cluster.getChildCount();
-          const markers = cluster.getAllChildMarkers();
-          const hasInterested = markers.some(m => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const id = (m.options as any).restaurantId;
-            return interested.has(id);
-          });
-          const hasBookmark = markers.some(m => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const id = (m.options as any).restaurantId;
-            return bookmarks.has(id);
-          });
-          const bg = hasInterested ? '#3b82f6' : hasBookmark ? '#fbbf24' : '#1e3a5f';
-          return L.divIcon({
-            className: "",
-            html: `<div style="width:40px;height:40px;background:${bg};border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;flex-direction:column;">
-              <span style="font-size:14px;">🐟</span>
-              <span style="font-size:10px;color:white;font-weight:bold;line-height:1;">${count}</span>
-            </div>`,
-            iconSize: [40, 40], iconAnchor: [20, 20],
-          });
-        }}
-      >
-        {restaurants.map(restaurant => {
-          const isInterested = interested.has(restaurant.id);
-          const isBookmarked = bookmarks.has(restaurant.id);
-          const icon = isInterested ? interestedIcon : isBookmarked ? bookmarkIcon : defaultIcon;
-
-          return (
-            <Marker
-              key={restaurant.id}
-              position={[restaurant.latitude, restaurant.longitude]}
-              icon={icon}
+        <MarkerClusterGroup
+          iconCreateFunction={(cluster: { getChildCount: () => number; getAllChildMarkers: () => L.Marker[] }) => {
+            const count = cluster.getChildCount();
+            const markers = cluster.getAllChildMarkers();
+            const hasInterested = markers.some(m => {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              {...{ restaurantId: restaurant.id } as any}
-            >
-              <Popup>
-                <div style={{ minWidth: "180px" }}>
-                  <p style={{ fontWeight: "bold", marginBottom: "4px", fontSize: "14px" }}>
-                    🐟 {restaurant.name || "名称不明"}
-                  </p>
-                  {restaurant.cuisine && (
-                    <p style={{ fontSize: "12px", color: "#3b82f6", marginBottom: "4px" }}>
-                      {cuisineLabel(restaurant.cuisine)}
+              const id = (m.options as any).restaurantId;
+              return interested.has(id);
+            });
+            const hasBookmark = markers.some(m => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const id = (m.options as any).restaurantId;
+              return bookmarks.has(id);
+            });
+            const bg = hasInterested ? '#3b82f6' : hasBookmark ? '#fbbf24' : '#1e3a5f';
+            return L.divIcon({
+              className: "",
+              html: `<div style="width:40px;height:40px;background:${bg};border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;flex-direction:column;">
+                <span style="font-size:14px;">🐟</span>
+                <span style="font-size:10px;color:white;font-weight:bold;line-height:1;">${count}</span>
+              </div>`,
+              iconSize: [40, 40], iconAnchor: [20, 20],
+            });
+          }}
+        >
+          {restaurants.map(restaurant => {
+            const isInterested = interested.has(restaurant.id);
+            const isBookmarked = bookmarks.has(restaurant.id);
+            const icon = isInterested ? interestedIcon : isBookmarked ? bookmarkIcon : defaultIcon;
+
+            return (
+              <Marker
+                key={restaurant.id}
+                position={[restaurant.latitude, restaurant.longitude]}
+                icon={icon}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                {...{ restaurantId: restaurant.id } as any}
+              >
+                <Popup>
+                  <div style={{ minWidth: "180px" }}>
+                    <p style={{ fontWeight: "bold", marginBottom: "4px", fontSize: "14px" }}>
+                      🐟 {restaurant.name || "名称不明"}
                     </p>
-                  )}
-                  {restaurant.address && (
-                    <p style={{ fontSize: "12px", color: "#666", marginBottom: "4px" }}>{restaurant.address}</p>
-                  )}
-                  {restaurant.opening_hours && (
-                    <p style={{ fontSize: "11px", color: "#888", marginBottom: "6px" }}>🕐 {restaurant.opening_hours}</p>
-                  )}
-                  <div style={{ display: "flex", gap: "4px", marginBottom: "6px" }}>
-                    <button
-                      onClick={() => onToggleInterested(restaurant.id)}
-                      style={{ flex: 1, padding: "4px", background: isInterested ? "#3b82f6" : "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}
-                    >{isInterested ? "♥ 気になる中" : "♥ 気になる"}</button>
-                    <button
-                      onClick={() => onToggleBookmark(restaurant.id)}
-                      style={{ flex: 1, padding: "4px", background: isBookmarked ? "#fbbf24" : "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}
-                    >{isBookmarked ? "⭐ 登録中" : "☆ お気に入り"}</button>
-                  </div>
-                  <div style={{ display: "flex", gap: "4px", marginBottom: "6px" }}>
+                    {restaurant.cuisine && (
+                      <p style={{ fontSize: "12px", color: "#3b82f6", marginBottom: "4px" }}>
+                        {cuisineLabel(restaurant.cuisine)}
+                      </p>
+                    )}
+                    {restaurant.address && (
+                      <p style={{ fontSize: "12px", color: "#666", marginBottom: "4px" }}>{restaurant.address}</p>
+                    )}
+                    {restaurant.opening_hours && (
+                      <p style={{ fontSize: "11px", color: "#888", marginBottom: "6px" }}>🕐 {restaurant.opening_hours}</p>
+                    )}
+                    <div style={{ display: "flex", gap: "4px", marginBottom: "6px" }}>
+                      <button
+                        onClick={() => onToggleInterested(restaurant.id)}
+                        style={{ flex: 1, padding: "4px", background: isInterested ? "#3b82f6" : "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}
+                      >{isInterested ? "♥ 気になる中" : "♥ 気になる"}</button>
+                      <button
+                        onClick={() => onToggleBookmark(restaurant.id)}
+                        style={{ flex: 1, padding: "4px", background: isBookmarked ? "#fbbf24" : "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}
+                      >{isBookmarked ? "⭐ 登録中" : "☆ お気に入り"}</button>
+                    </div>
+                    <div style={{ display: "flex", gap: "4px", marginBottom: "6px" }}>
+                      <a
+                        href={"https://line.me/R/share?text=" + encodeURIComponent("🐟 " + (restaurant.name || "") + "\n" + (restaurant.address || "") + "\nhttps://fishtime.vercel.app")}
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ flex: 1, padding: "4px", background: "#06C755", borderRadius: "4px", fontSize: "12px", color: "white", textAlign: "center", textDecoration: "none", fontWeight: "bold" }}
+                      >LINE</a>
+                      <a
+                        href={"https://twitter.com/intent/tweet?text=" + encodeURIComponent("🐟 " + (restaurant.name || "") + " でランチ！\n" + (restaurant.address || "") + "\n#フィッシュタイム #海鮮\nhttps://fishtime.vercel.app")}
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ flex: 1, padding: "4px", background: "#000", borderRadius: "4px", fontSize: "12px", color: "white", textAlign: "center", textDecoration: "none", fontWeight: "bold" }}
+                      >X 投稿</a>
+                    </div>
                     <a
-                      href={"https://line.me/R/share?text=" + encodeURIComponent("🐟 " + (restaurant.name || "") + "\n" + (restaurant.address || "") + "\nhttps://fishtime.vercel.app")}
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${restaurant.latitude},${restaurant.longitude}`}
                       target="_blank" rel="noopener noreferrer"
-                      style={{ flex: 1, padding: "4px", background: "#06C755", borderRadius: "4px", fontSize: "12px", color: "white", textAlign: "center", textDecoration: "none", fontWeight: "bold" }}
-                    >LINE</a>
-                    <a
-                      href={"https://twitter.com/intent/tweet?text=" + encodeURIComponent("🐟 " + (restaurant.name || "") + " でランチ！\n" + (restaurant.address || "") + "\n#フィッシュタイム #海鮮\nhttps://fishtime.vercel.app")}
-                      target="_blank" rel="noopener noreferrer"
-                      style={{ flex: 1, padding: "4px", background: "#000", borderRadius: "4px", fontSize: "12px", color: "white", textAlign: "center", textDecoration: "none", fontWeight: "bold" }}
-                    >X 投稿</a>
+                      style={{ display: "block", textAlign: "center", background: "#1e3a5f", color: "white", padding: "6px", borderRadius: "4px", fontSize: "12px", textDecoration: "none" }}
+                    >🗺️ Google Maps で開く</a>
                   </div>
-                  <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${restaurant.latitude},${restaurant.longitude}`}
-                    target="_blank" rel="noopener noreferrer"
-                    style={{ display: "block", textAlign: "center", background: "#1e3a5f", color: "white", padding: "6px", borderRadius: "4px", fontSize: "12px", textDecoration: "none" }}
-                  >🗺️ Google Maps で開く</a>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
-      </MarkerClusterGroup>
-    </MapContainer>
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MarkerClusterGroup>
+      </MapContainer>
+    </>
   );
 }
