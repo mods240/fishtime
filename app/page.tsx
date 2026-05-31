@@ -137,7 +137,12 @@ export default function Home() {
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-        setCenter(coords);
+        // 20m以上移動した時だけcenterを更新（パカパカ防止）
+        const prev = currentPosRef.current;
+        const moved = !prev || calcDistance(prev[0], prev[1], coords[0], coords[1]) > 0.02;
+        if (moved) {
+          setCenter(coords);
+        }
         currentPosRef.current = coords;
 
         const now = Date.now();
