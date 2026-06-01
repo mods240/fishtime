@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "フィッシュタイム",
   },
-  icons: { apple: "/icon-192.png" },
+  icons: { apple: "/fishtime-icon-192.png" },
   openGraph: {
     title: "フィッシュタイム🐟 - 海鮮・寿司ナビ",
     description: "全国の寿司・和食・海鮮レストランを地図で見つけるアプリ。",
@@ -36,8 +36,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="フィッシュタイム" />
-        <link rel="icon" href="/icon-192.png" type="image/png" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="icon" href="/fishtime-icon-192.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/fishtime-icon-192.png" />
         <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-0822883607725147" crossOrigin="anonymous"></script>
       </head>
       <body>{children}</body>
