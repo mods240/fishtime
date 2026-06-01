@@ -133,7 +133,7 @@ function InstallBanner() {
 
   if (!show) return null;
   return (
-    <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'#fff', borderTop:'2px solid #1d4ed8', padding:'12px 16px 28px', display:'flex', alignItems:'center', gap:12, zIndex:200, boxShadow:'0 -4px 20px rgba(29,78,216,0.15)' }}>
+    <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'#fff', borderTop:'2px solid #1d4ed8', padding:'12px 16px 28px', display:'flex', alignItems:'center', gap:12, zIndex:9999, boxShadow:'0 -4px 20px rgba(29,78,216,0.15)', pointerEvents:'all' }}>
       <span style={{ fontSize:'1.8rem', flexShrink:0 }}>📲</span>
       <div style={{ flex:1 }}>
         <p style={{ margin:'0 0 2px', fontWeight:800, fontSize:14, color:'#1e3a8a' }}>ホーム画面に追加する</p>
