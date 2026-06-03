@@ -104,52 +104,58 @@ function MapInit({ center }: { center: [number, number] }) {
 
 export default function FishtimeMap({ restaurants, center, bookmarks, interested, onToggleBookmark, onToggleInterested }: MapProps) {
   const [heading, setHeading] = useState<number | null>(null);
-  const [showCompassModal, setShowCompassModal] = useState(false);
+  const [compassEnabled, setCompassEnabled] = useState(false);
   const handleOrientationRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
+  const headingRef = useRef<number | null>(null);
 
-  function startCompass() {
-    function handleOrientation(e: DeviceOrientationEvent) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ios = (e as any).webkitCompassHeading;
-      if (ios != null) {
-        setHeading(ios);
-      } else if (e.alpha != null) {
-        setHeading(360 - e.alpha);
-      }
+  function handleOrientation(e: DeviceOrientationEvent) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ios = (e as any).webkitCompassHeading;
+    const newHeading = ios != null ? ios : e.alpha != null ? 360 - e.alpha : null;
+    if (newHeading === null) return;
+    const prev = headingRef.current;
+    if (prev === null || Math.abs(newHeading - prev) >= 5) {
+      headingRef.current = newHeading;
+      setHeading(newHeading);
     }
+  }
+
+  function attachCompass() {
     handleOrientationRef.current = handleOrientation;
+    window.addEventListener("deviceorientation", handleOrientation, true);
+    setCompassEnabled(true);
+    localStorage.setItem('fishtime_compass_enabled', 'true');
+  }
+
+  async function enableCompass() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const DevOrient = DeviceOrientationEvent as any;
     if (typeof DevOrient.requestPermission === "function") {
-      // iOS: requestPermissionが必要
-      DevOrient.requestPermission()
-        .then((result: string) => {
-          if (result === "granted") {
-            window.addEventListener("deviceorientation", handleOrientation, true);
-          }
-        })
-        .catch(() => {});
+      try {
+        const result = await DevOrient.requestPermission();
+        if (result === "granted") attachCompass();
+      } catch (err) {
+        console.error('Compass permission error:', err);
+      }
     } else {
-      // Android・PC
-      window.addEventListener("deviceorientation", handleOrientation, true);
+      attachCompass();
     }
   }
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const DevOrient = DeviceOrientationEvent as any;
-    if (typeof DevOrient.requestPermission === "function") {
-      // iOS: 初回だけモーダルを表示（localStorageで記憶）
-      if (!localStorage.getItem("compassPermissionAsked")) {
-        localStorage.setItem("compassPermissionAsked", "true");
-        setShowCompassModal(true);
-      } else if (localStorage.getItem("compassPermissionGranted") === "true") {
-        // 以前に許可済みならそのまま開始
-        startCompass();
-      }
+    if (typeof DevOrient.requestPermission !== "function") {
+      // Android/PC: 自動で有効化
+      attachCompass();
     } else {
-      // Android・PC: 許可不要なのでそのまま開始
-      startCompass();
+      // iOS: 以前許可済みならサイレントで再試行
+      const saved = localStorage.getItem('fishtime_compass_enabled');
+      if (saved === 'true') {
+        DevOrient.requestPermission()
+          .then((result: string) => { if (result === "granted") attachCompass(); })
+          .catch(() => {});
+      }
     }
     return () => {
       if (handleOrientationRef.current) {
@@ -159,56 +165,14 @@ export default function FishtimeMap({ restaurants, center, bookmarks, interested
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleCompassAllow() {
-    localStorage.setItem("compassPermissionGranted", "true");
-    setShowCompassModal(false);
-    startCompass();
-  }
-
-  function handleCompassDeny() {
-    setShowCompassModal(false);
+  function goToCurrentLocation() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = (window as any)._fishtimeMap;
+    if (map && center) map.setView(center, 16);
   }
 
   return (
-    <>
-      {showCompassModal && (
-        <div style={{
-          position: "fixed", inset: 0, zIndex: 9999,
-          background: "rgba(0,0,0,0.6)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          padding: "24px",
-        }}>
-          <div style={{
-            background: "white", borderRadius: "16px", padding: "24px",
-            maxWidth: "320px", width: "100%", textAlign: "center",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
-          }}>
-            <div style={{ fontSize: "48px", marginBottom: "12px" }}>🧭</div>
-            <h2 style={{ fontSize: "18px", fontWeight: "bold", color: "#1e3a5f", marginBottom: "8px" }}>
-              方向ビームを使いますか？
-            </h2>
-            <p style={{ fontSize: "14px", color: "#666", marginBottom: "24px", lineHeight: "1.6" }}>
-              スマホの向きを検知して、現在地から進行方向にビームを表示します。
-            </p>
-            <button
-              onClick={handleCompassAllow}
-              style={{
-                width: "100%", padding: "12px", marginBottom: "8px",
-                background: "#1e3a5f", color: "white", border: "none",
-                borderRadius: "8px", fontSize: "16px", fontWeight: "bold", cursor: "pointer",
-              }}
-            >🧭 許可する</button>
-            <button
-              onClick={handleCompassDeny}
-              style={{
-                width: "100%", padding: "10px",
-                background: "transparent", color: "#999", border: "none",
-                borderRadius: "8px", fontSize: "14px", cursor: "pointer",
-              }}
-            >使わない</button>
-          </div>
-        </div>
-      )}
+    <div style={{ position: 'relative', height: '100%', width: '100%' }}>
       <MapContainer center={center} zoom={14} style={{ height: "100%", width: "100%" }} zoomControl={true}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -307,6 +271,34 @@ export default function FishtimeMap({ restaurants, center, bookmarks, interested
           })}
         </MarkerClusterGroup>
       </MapContainer>
-    </>
+
+      {/* コンパスボタン */}
+      {!compassEnabled && (
+        <button
+          onClick={enableCompass}
+          style={{
+            position: 'absolute', bottom: 80, right: 12, zIndex: 1000,
+            width: 44, height: 44, borderRadius: '50%',
+            background: 'white', border: '2px solid #1e3a5f',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.2)', cursor: 'pointer',
+            fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          title="コンパスを有効化"
+        >🧭</button>
+      )}
+
+      {/* 現在地ボタン */}
+      <button
+        onClick={goToCurrentLocation}
+        style={{
+          position: 'absolute', bottom: 32, right: 12, zIndex: 1000,
+          width: 44, height: 44, borderRadius: '50%',
+          background: 'white', border: '2px solid #1e3a5f',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)', cursor: 'pointer',
+          fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+        title="現在地に戻る"
+      >📍</button>
+    </div>
   );
 }
